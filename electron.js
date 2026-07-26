@@ -1,20 +1,14 @@
 // electron.js
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { loadSettings, saveSettings } = require('./main/settings');
 const { translateUrl } = require('./main/translate');
-const fs = require('fs');
 
-// 诊断日志（排查打包后白屏用，验证后可移除）
-const AW_LOG = '/tmp/aw-debug.log';
-function awLog(...args) {
-  try {
-    const line = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
-    fs.appendFileSync(AW_LOG, `[${new Date().toISOString()}] ${line}\n`);
-  } catch (_) {}
-}
-process.on('uncaughtException', (e) => awLog('[uncaughtException]', (e && e.stack) || e));
-process.on('unhandledRejection', (e) => awLog('[unhandledRejection]', (e && e.stack) || e));
+// ---- 诊断（白屏排查用，确认后可删）----
+const dbgLog = '/tmp/aw-debug.log';
+const dbg = (s) => { try { fs.appendFileSync(dbgLog, `[${new Date().toISOString()}] ${s}\n`); } catch (e) {} };
+dbg('MODULE LOADED');
 
 // dev 模式：主进程文件（electron.js / preload.js / main/*）改动后自动硬重启，
 // 免去手动退出再跑 pnpm dev。纯 UI(src/) 改动由 CRA 自带 HMR 热更，不在此监听。
@@ -36,6 +30,7 @@ if (!app.isPackaged) {
 let mainWindow;
 
 function createWindow() {
+  dbg('createWindow start');
   mainWindow = new BrowserWindow({
     width: 1000,
     height: 720,
@@ -47,27 +42,31 @@ function createWindow() {
     },
   });
 
-  // 用内置 app.isPackaged 判断环境，避免依赖打包后缺失的 electron-is-dev 包。
-  // ⚠️ 关键：app 名含空格（Agent Workflow.app），手动拼 file:// 会因空格未编码
-  //    导致 Chromium 解析失败→白屏；生产模式必须用 loadFile（内部走 pathToFileURL
-  //    自动编码空格与 asar 路径）。
-  const isDev = !app.isPackaged;
-  if (isDev) {
-    mainWindow.loadURL('http://localhost:3000').catch((err) => awLog('[main] dev loadURL 失败:', err));
-  } else {
-    mainWindow.loadFile(path.join(__dirname, 'build', 'index.html')).catch((err) => {
-      awLog('[main] 加载 build/index.html 失败:', err);
-      console.error('[main] 加载页面失败:', err);
-    });
-  }
+  process.on('uncaughtException', (e) => dbg('uncaughtException: ' + (e && e.stack || e)));
+  process.on('unhandledRejection', (e) => dbg('unhandledRejection: ' + (e && e.stack || e)));
+  mainWindow.webContents.on('console-message', (e, level, message) => dbg('renderer[lvl=' + level + ']: ' + message));
+  mainWindow.webContents.on('did-fail-load', (e, errorCode, errorDescription) => { dbg('did-fail-load: ' + errorCode + ' ' + errorDescription); try { dialog.showErrorBox('页面加载失败', 'code=' + errorCode + ' ' + errorDescription); } catch (_) {} });
+  mainWindow.webContents.on('crashed', () => dbg('renderer crashed'));
 
-  // 捕获渲染进程控制台与加载失败，写入诊断日志（白屏时排查用）
-  mainWindow.webContents.on('console-message', (_e, level, message, source) => {
-    awLog(`[renderer:${level}] ${message}${source ? ' @ ' + source : ''}`);
+  // 渲染完成后的内容抽样（确认白屏用，验证后可删）
+  mainWindow.webContents.on('did-finish-load', () => {
+    dbg('did-finish-load');
+    setTimeout(() => {
+      mainWindow.webContents.executeJavaScript(
+        "JSON.stringify({rootLen:(document.getElementById('root')||{}).innerHTML?.length||0,title:document.title,bodyText:(document.body.innerText||'').slice(0,120)})"
+      ).then((r) => dbg('RENDER-CHECK: ' + r)).catch((e) => dbg('RENDER-CHECK err: ' + e));
+    }, 1500);
   });
-  mainWindow.webContents.on('did-fail-load', (_e, errorCode, errorDescription, url) => {
-    awLog('[did-fail-load]', errorCode, errorDescription, url);
-  });
+
+  // 生产环境用 loadFile：内部走 pathToFileURL，自动编码 app 名中的空格与 asar 路径，
+  // 规避「Agent Workflow.app」含空格导致 file:// 未编码 -> Chromium 解析失败 -> 白屏。
+  if (!app.isPackaged) {
+    mainWindow.loadURL('http://localhost:3000').then(() => dbg('loadURL resolved')).catch((e) => dbg('load dev url failed: ' + e));
+  } else {
+    mainWindow.loadFile(path.join(__dirname, 'build', 'index.html'))
+      .then(() => { dbg('loadFile resolved'); mainWindow.webContents.openDevTools(); })
+      .catch((e) => { dbg('loadFile failed: ' + e); try { dialog.showErrorBox('页面加载失败', String(e)); } catch (_) {} });
+  }
 
   mainWindow.on('closed', () => (mainWindow = null));
 }
@@ -92,6 +91,7 @@ ipcMain.handle('translate:url', async (event, { url }) => {
 
 // 现代 Electron 推荐用 whenReady() 替代已废弃的 app.on('ready')
 app.whenReady().then(() => {
+  dbg('whenReady resolved');
   createWindow();
 
   app.on('activate', () => {

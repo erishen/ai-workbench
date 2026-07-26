@@ -17,7 +17,12 @@ set -euo pipefail
 
 APP_NAME="Agent Workflow"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DMG="$(ls -1 "$SCRIPT_DIR"/"${APP_NAME}"-*.dmg 2>/dev/null | head -1 || true)"
+# 优先使用 dist/ 下最新打包的产物；根目录旧 dmg（历史遗留）不作为来源
+if compgen -G "$SCRIPT_DIR"/dist/"${APP_NAME}"-*.dmg >/dev/null; then
+  DMG="$(ls -1 "$SCRIPT_DIR"/dist/"${APP_NAME}"-*.dmg | head -1)"
+else
+  DMG="$(ls -1 "$SCRIPT_DIR"/"${APP_NAME}"-*.dmg 2>/dev/null | head -1 || true)"
+fi
 
 if [[ -z "$DMG" ]]; then
   echo "✗ 未找到 ${APP_NAME}-*.dmg，请把 dmg 与本脚本放同一目录。" >&2
@@ -34,6 +39,11 @@ if [[ ! -d "$SRC" ]]; then
   echo "✗ dmg 内未找到 ${APP_NAME}.app" >&2
   exit 1
 fi
+
+echo "▶ 退出已运行的旧实例 ..."
+pkill -f "/Applications/${APP_NAME}.app" 2>/dev/null || true
+osascript -e "tell application \"${APP_NAME}\" to quit" 2>/dev/null || true
+sleep 1
 
 echo "▶ 拷贝到 /Applications ..."
 rm -rf "/Applications/${APP_NAME}.app"
