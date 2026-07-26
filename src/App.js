@@ -1,40 +1,39 @@
-import logo from './logo.svg';
 import './App.css';
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
+import { isElectron } from './lib/env';
+import { MODULES } from './config/modules';
+import Sidebar from './components/Sidebar';
+import SettingsView from './components/SettingsView';
 
-function App() {
+export default function App() {
   const [version, setVersion] = useState('');
+  const [active, setActive] = useState(MODULES[0]?.id || 'translate');
 
   useEffect(() => {
-    // 经 preload 桥安全调用主进程能力；浏览器/非 Electron 环境无该 API 时静默跳过
-    if (window.electronAPI && window.electronAPI.getAppVersion) {
-      window.electronAPI.getAppVersion().then(setVersion).catch(() => {});
-    }
+    if (!isElectron) return;
+    window.electronAPI.getAppVersion?.().then(setVersion).catch(() => {});
   }, []);
 
+  // 根据 active 渲染对应模块组件；设置是独立的全局视图
+  const activeModule = MODULES.find((m) => m.id === active);
+  const ActiveComponent = activeModule ? activeModule.component : null;
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload by erishen
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-        {version && (
-          <p style={{ marginTop: 16, opacity: 0.7 }}>
-            App version: {version}
-          </p>
+    <div className="layout">
+      <Sidebar active={active} onSelect={setActive} />
+      <main className="content">
+        {active === 'settings' ? (
+          <SettingsView />
+        ) : ActiveComponent ? (
+          <ActiveComponent />
+        ) : null}
+        {!isElectron && (
+          <div className="alert muted" style={{ marginTop: 16 }}>
+            提示：翻译功能需在 Electron 桌面环境中运行（浏览器环境无主进程桥接）。
+          </div>
         )}
-      </header>
+        {version && <div className="version">App version: {version}</div>}
+      </main>
     </div>
   );
 }
-
-export default App;

@@ -18,6 +18,14 @@
 .env.test.local
 .env.production.local
 
+# 本地私密配置（含 API Key）——禁止提交，也不会打进分发给他人的安装包
+# 开发者把真实 Key 放进项目根的 .env（精确文件名，已被忽略）；复制 .env.example 为 .env 使用。
+# 注意：.env.example 是提交到 git 的模板，此处故意不忽略。
+.env
+
+# 运行时用户凭据（位于 userData，不在项目内；若误放在项目根则忽略）
+settings.json
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

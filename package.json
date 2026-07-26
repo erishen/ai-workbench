@@ -4,25 +4,26 @@
   "private": true,
   "main": "electron.js",
   "homepage": "./",
-
   "build": {
     "appId": "com.erishen.myapp",
-    "productName": "My Electron App",
+    "productName": "Agent Workflow",
     "directories": {
       "output": "dist"
     },
     "files": [
       "build/**/*",
       "electron.js",
-      "preload.js"
+      "preload.js",
+      "main/**/*"
     ],
     "asar": true
   },
-  
   "dependencies": {
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
+    "dotenv": "^17.4.2",
+    "node-html-parser": "^9.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-scripts": "5.0.1",
@@ -61,6 +62,7 @@
     "electron": "^31.1.0",
     "electron-builder": "^24.13.3",
     "electron-is-dev": "^3.0.1",
+    "electron-reload": "2.0.0-alpha.1",
     "wait-on": "^8.0.3"
   }
 }
