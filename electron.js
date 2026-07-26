@@ -64,7 +64,7 @@ function createWindow() {
     mainWindow.loadURL('http://localhost:3000').then(() => dbg('loadURL resolved')).catch((e) => dbg('load dev url failed: ' + e));
   } else {
     mainWindow.loadFile(path.join(__dirname, 'build', 'index.html'))
-      .then(() => { dbg('loadFile resolved'); mainWindow.webContents.openDevTools(); })
+      .then(() => dbg('loadFile resolved'))
       .catch((e) => { dbg('loadFile failed: ' + e); try { dialog.showErrorBox('页面加载失败', String(e)); } catch (_) {} });
   }
 
