@@ -35,13 +35,15 @@ function createWindow() {
     },
   });
 
-  (async () => {
-    const isDev = (await import('electron-is-dev')).default;
-    const startURL = isDev
-      ? 'http://localhost:3000'
-      : `file://${path.join(__dirname, './build/index.html')}`;
-    mainWindow.loadURL(startURL);
-  })();
+  // 用内置 app.isPackaged 判断运行环境，避免依赖打包后缺失的 electron-is-dev 包。
+  // 开发模式（pnpm dev / pnpm electron .）走 CRA dev server；打包后走本地 build 产物。
+  const isDev = !app.isPackaged;
+  const startURL = isDev
+    ? 'http://localhost:3000'
+    : `file://${path.join(__dirname, './build/index.html')}`;
+  mainWindow.loadURL(startURL).catch((err) => {
+    console.error('[main] 加载页面失败:', err);
+  });
 
   mainWindow.on('closed', () => (mainWindow = null));
 }

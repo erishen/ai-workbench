@@ -17,7 +17,8 @@
       "build/**/*",
       "electron.js",
       "preload.js",
-      "main/**/*"
+      "main/**/*",
+      "node_modules/**/*"
     ],
     "asar": true,
     "electronDownload": {
