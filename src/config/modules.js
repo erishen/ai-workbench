@@ -1,9 +1,17 @@
 import TranslateModule from '../modules/TranslateModule';
+import ChatModule from '../modules/ChatModule';
 
 // 功能模块注册表：后续新增 AI 工作流，只需在此数组加一项 + 写一个模块组件。
 // component 直接绑定渲染组件，App 按 active 渲染对应模块 —— 新增模块无需改动 App.js。
 // 注意：设置（SettingsView）是全局凭证视图，不属于功能模块，由 Sidebar 单独处理。
 export const MODULES = [
+  {
+    id: 'chat',
+    name: '大模型对话',
+    icon: '💬',
+    desc: '与任意 OpenAI 兼容大模型多轮对话（流式输出）。',
+    component: ChatModule,
+  },
   {
     id: 'translate',
     name: '页面翻译',

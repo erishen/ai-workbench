@@ -3,7 +3,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 // 允许主进程 -> 渲染进程的单向通道白名单（避免任意 channel 监听）
-const VALID_INBOUND_CHANNELS = ['update-message', 'translate:progress'];
+const VALID_INBOUND_CHANNELS = ['update-message', 'translate:progress', 'chat:progress'];
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // 主进程 -> 渲染进程（渲染进程主动拉取）
@@ -27,5 +27,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event, ...args) => callback(...args);
     ipcRenderer.on('translate:progress', handler);
     return () => ipcRenderer.removeListener('translate:progress', handler);
+  },
+
+  // 多轮对话：发送完整 messages 历史，返回 { content, usage }
+  chatMessage: (messages) => ipcRenderer.invoke('chat:message', { messages }),
+
+  // 对话流式推送（专用封装）；返回取消订阅函数，供 useEffect 清理，避免重复监听
+  onChatProgress: (callback) => {
+    const handler = (_event, ...args) => callback(...args);
+    ipcRenderer.on('chat:progress', handler);
+    return () => ipcRenderer.removeListener('chat:progress', handler);
   },
 });

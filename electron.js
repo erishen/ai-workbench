@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { loadSettings, saveSettings } = require('./main/settings');
 const { translateUrl } = require('./main/translate');
+const { chatStream } = require('./main/llm');
 
 // ---- 诊断（白屏排查用，确认后可删）----
 const dbgLog = '/tmp/aw-debug.log';
@@ -86,6 +87,27 @@ ipcMain.handle('translate:url', async (event, { url }) => {
   }
   return translateUrl(url, settings, (progress) => {
     if (mainWindow) mainWindow.webContents.send('translate:progress', progress);
+  });
+});
+
+// 多轮对话：渲染端维护完整 messages 历史，主进程逐 token 推回（chat:progress），返回完整内容与用量
+ipcMain.handle('chat:message', async (event, { messages }) => {
+  const settings = loadSettings();
+  if (!settings.apiKey) {
+    throw new Error('请先在「设置」中填写外部大模型的 API Key');
+  }
+  if (!Array.isArray(messages) || messages.length === 0) {
+    throw new Error('消息内容为空');
+  }
+  return chatStream({
+    baseURL: settings.baseURL,
+    apiKey: settings.apiKey,
+    model: settings.model,
+    messages,
+    temperature: 0.7,
+    onToken: (delta) => {
+      if (mainWindow) mainWindow.webContents.send('chat:progress', { delta });
+    },
   });
 });
 
