@@ -2,10 +2,13 @@
   "name": "electron-react-app",
   "version": "0.1.0",
   "private": true,
+  "description": "本地桌面 AI 工作台：可配置外部大模型，提供页面翻译等 AI 能力模块。",
+  "author": "erishen",
   "main": "electron.js",
   "homepage": "./",
   "build": {
-    "appId": "com.erishen.myapp",
+    "extends": null,
+    "appId": "com.erishen.agentworkflow",
     "productName": "Agent Workflow",
     "directories": {
       "output": "dist"
@@ -16,7 +19,18 @@
       "preload.js",
       "main/**/*"
     ],
-    "asar": true
+    "asar": true,
+    "electronDownload": {
+      "mirror": "https://registry.npmmirror.com/-/binary/electron/v"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.utilities",
+      "identity": null
+    },
+    "dmg": {
+      "title": "Agent Workflow"
+    }
   },
   "dependencies": {
     "@testing-library/jest-dom": "^5.17.0",
