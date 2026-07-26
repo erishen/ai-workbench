@@ -3,6 +3,18 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { loadSettings, saveSettings } = require('./main/settings');
 const { translateUrl } = require('./main/translate');
+const fs = require('fs');
+
+// 诊断日志（排查打包后白屏用，验证后可移除）
+const AW_LOG = '/tmp/aw-debug.log';
+function awLog(...args) {
+  try {
+    const line = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+    fs.appendFileSync(AW_LOG, `[${new Date().toISOString()}] ${line}\n`);
+  } catch (_) {}
+}
+process.on('uncaughtException', (e) => awLog('[uncaughtException]', (e && e.stack) || e));
+process.on('unhandledRejection', (e) => awLog('[unhandledRejection]', (e && e.stack) || e));
 
 // dev 模式：主进程文件（electron.js / preload.js / main/*）改动后自动硬重启，
 // 免去手动退出再跑 pnpm dev。纯 UI(src/) 改动由 CRA 自带 HMR 热更，不在此监听。
@@ -35,14 +47,26 @@ function createWindow() {
     },
   });
 
-  // 用内置 app.isPackaged 判断运行环境，避免依赖打包后缺失的 electron-is-dev 包。
-  // 开发模式（pnpm dev / pnpm electron .）走 CRA dev server；打包后走本地 build 产物。
+  // 用内置 app.isPackaged 判断环境，避免依赖打包后缺失的 electron-is-dev 包。
+  // ⚠️ 关键：app 名含空格（Agent Workflow.app），手动拼 file:// 会因空格未编码
+  //    导致 Chromium 解析失败→白屏；生产模式必须用 loadFile（内部走 pathToFileURL
+  //    自动编码空格与 asar 路径）。
   const isDev = !app.isPackaged;
-  const startURL = isDev
-    ? 'http://localhost:3000'
-    : `file://${path.join(__dirname, './build/index.html')}`;
-  mainWindow.loadURL(startURL).catch((err) => {
-    console.error('[main] 加载页面失败:', err);
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:3000').catch((err) => awLog('[main] dev loadURL 失败:', err));
+  } else {
+    mainWindow.loadFile(path.join(__dirname, 'build', 'index.html')).catch((err) => {
+      awLog('[main] 加载 build/index.html 失败:', err);
+      console.error('[main] 加载页面失败:', err);
+    });
+  }
+
+  // 捕获渲染进程控制台与加载失败，写入诊断日志（白屏时排查用）
+  mainWindow.webContents.on('console-message', (_e, level, message, source) => {
+    awLog(`[renderer:${level}] ${message}${source ? ' @ ' + source : ''}`);
+  });
+  mainWindow.webContents.on('did-fail-load', (_e, errorCode, errorDescription, url) => {
+    awLog('[did-fail-load]', errorCode, errorDescription, url);
   });
 
   mainWindow.on('closed', () => (mainWindow = null));
