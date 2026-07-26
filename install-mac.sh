@@ -9,8 +9,9 @@
 #   3) ./install-mac.sh
 #
 # 说明：脚本会挂载 dmg、把 .app 拷到 /Applications、移除下载隔离标记、
-#       并把该 app 加入本机 Gatekeeper 白名单（sudo 需输入开机密码）。
-#       白名单按 app 哈希添加，仅本机、仅此 app 生效，安全。
+#       并对 app 做本机 ad-hoc 签名（codesign --force --deep --sign -），
+#       让 Gatekeeper 认为 app 已签名而放行（无需 $99 账号）。
+#       ⚠️ 新版 macOS 已移除 `spctl --add`，故改用 ad-hoc 签名方案。
 
 set -euo pipefail
 
@@ -39,10 +40,10 @@ rm -rf "/Applications/${APP_NAME}.app"
 cp -R "$SRC" "/Applications/${APP_NAME}.app"
 
 echo "▶ 移除下载隔离标记 ..."
-xattr -dr com.apple.quarantine "/Applications/${APP_NAME}.app" 2>/dev/null || true
+xattr -cr "/Applications/${APP_NAME}.app" 2>/dev/null || true
 
-echo "▶ 加入本机 Gatekeeper 白名单（如提示请输入开机密码）..."
-sudo spctl --add "/Applications/${APP_NAME}.app"
+echo "▶ 本机 ad-hoc 签名（替代已失效的 spctl --add，无需 $99 账号）..."
+codesign --force --deep --sign - "/Applications/${APP_NAME}.app"
 
 echo "✓ 安装完成，正在打开 ..."
 open "/Applications/${APP_NAME}.app"
