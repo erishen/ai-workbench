@@ -42,7 +42,7 @@ cp -R "$SRC" "/Applications/${APP_NAME}.app"
 echo "▶ 移除下载隔离标记 ..."
 xattr -cr "/Applications/${APP_NAME}.app" 2>/dev/null || true
 
-echo "▶ 本机 ad-hoc 签名（替代已失效的 spctl --add，无需 $99 账号）..."
+echo "▶ 本机 ad-hoc 签名（替代已失效的 spctl --add，无需每年 99 美元的开发者账号）..."
 codesign --force --deep --sign - "/Applications/${APP_NAME}.app"
 
 echo "✓ 安装完成，正在打开 ..."
