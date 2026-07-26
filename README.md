@@ -1,70 +1,63 @@
-# Getting Started with Create React App
+# Electron React App
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+基于 **Create React App (react-scripts 5)** + **Electron 31** 的桌面端基线。
+已在安全基线上配置：`nodeIntegration: false` + `contextIsolation: true`，渲染进程仅经 `preload.js` 暴露的 `window.electronAPI` 桥与主进程通信。
 
-## Available Scripts
+## 环境准备
 
-In the project directory, you can run:
+本项目使用 **pnpm**（已附 `.npmrc`：`shamefully-hoist=true` 以兼容 react-scripts）。
 
-### `npm start`
+```bash
+pnpm install
+```
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+> 首次安装会下载 Electron 二进制（较大，需联网）。若下载缓慢，可设置镜像：
+> `ELECTRON_MIRROR="https://registry.npmmirror.com/-/binary/electron/" pnpm install`
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## 常用脚本
 
-### `npm test`
+| 命令 | 作用 |
+| --- | --- |
+| `pnpm start` | 仅启动 CRA 开发服务器（http://localhost:3000，浏览器调试用） |
+| `pnpm run dev` | **开发模式一键联动**：后台起 CRA 开发服务器，待 3000 端口就绪后自动拉起 Electron 窗口（已设 `BROWSER=none` 避免重复开浏览器） |
+| `pnpm run build` | CRA 生产构建到 `build/`（资源路径已用 `homepage: "./"` 改为相对路径，避免 `file://` 白屏） |
+| `pnpm run electron` | 单独启动 Electron（需先有 `build/` 或开发服务器） |
+| `pnpm run dist` | 用 electron-builder 打包成安装包，输出到 `dist/` |
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## 打包
 
-### `npm run build`
+```bash
+pnpm run build   # 1. 先产出 build/
+pnpm run dist    # 2. 打包成平台安装包
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+打包文件清单在 `package.json` 的 `build.files` 中（含 `build/`、`electron.js`、`preload.js`），并启用 `asar`。
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## 渲染进程 ↔ 主进程通信
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+主进程能力不向渲染进程暴露 Node，需经 `preload.js` 的白名单桥：
 
-### `npm run eject`
+```js
+// 渲染进程中
+const version = await window.electronAPI.getAppVersion(); // 返回 package.json 的 version
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+// 订阅主进程主动推送（仅白名单 channel：update-message）
+window.electronAPI.onMessage('update-message', (payload) => {
+  console.log(payload);
+});
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+要新增能力，遵循两步：
+1. 主进程 `electron.js` 用 `ipcMain.handle('xxx', ...)` 或 `ipcMain.on('xxx', ...)` 注册；
+2. `preload.js` 在 `contextBridge.exposeInMainWorld` 中显式暴露（推送 channel 需加入 `VALID_INBOUND_CHANNELS` 白名单）。
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## 目录结构
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+```
+electron-react-app/
+├── electron.js        # 主进程：窗口、加载 URL、IPC handler
+├── preload.js         # 预加载：contextBridge 安全桥
+├── src/               # React 渲染进程（CRA 结构）
+├── build/             # CRA 生产构建产物（打包时由 Electron 加载）
+└── dist/              # electron-builder 打包输出
+```
