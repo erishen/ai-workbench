@@ -28,6 +28,7 @@ settings.json
 
 # electron-builder 打包产物（dmg / mac-arm64 等，体积大，不进库）
 /dist
+*.dmg
 
 npm-debug.log*
 yarn-debug.log*
