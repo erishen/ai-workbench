@@ -205,8 +205,9 @@ function splitBySentences(p, max) {
 }
 
 // 翻译单个 URL 指向的页面
+// creds = { baseURL, apiKey, model }（由上层按所选模型配置解析；不传则用主配置）
 // onProgress(entry) 用于把过程日志回传给渲染进程做展示
-async function translateUrl(url, settings, onProgress) {
+async function translateUrl(url, creds, onProgress) {
   const emit = (level, msg, extra = {}) => {
     if (onProgress) onProgress({ ts: Date.now(), level, msg, ...extra });
   };
@@ -219,6 +220,18 @@ async function translateUrl(url, settings, onProgress) {
     usageSum.totalTokens += u.totalTokens || 0;
   };
 
+  // 协议白名单：仅允许 http/https，避免 file:// / 内网等非预期 URL 经 fetch 读取
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch (_) {
+    emit('error', 'URL 格式无效');
+    throw new Error(`URL 格式无效：${url}`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    emit('error', `仅支持 http/https 协议（收到 ${parsed.protocol}）`);
+    throw new Error(`仅支持 http/https 协议的 URL（收到 ${parsed.protocol}）`);
+  }
   emit('info', `开始抓取页面：${url}`);
   const res = await fetch(url, {
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TranslateAgent/1.0)' },
@@ -256,9 +269,10 @@ async function translateUrl(url, settings, onProgress) {
       total: chunks.length,
     });
     const r1 = await chatCompletion({
-      baseURL: settings.baseURL,
-      apiKey: settings.apiKey,
-      model: settings.model,
+      baseURL: creds.baseURL,
+      apiKey: creds.apiKey,
+      model: creds.model,
+      proxy: creds.proxy,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: chunks[i] },
@@ -272,9 +286,10 @@ async function translateUrl(url, settings, onProgress) {
       emit('info', `第 ${i + 1} 段译文仍为英文，强制重试一次`);
       const forced = `${systemPrompt}\n\nIMPORTANT: The input is in English. Output ONLY the Chinese translation and nothing else.`;
       const r2 = await chatCompletion({
-        baseURL: settings.baseURL,
-        apiKey: settings.apiKey,
-        model: settings.model,
+        baseURL: creds.baseURL,
+        apiKey: creds.apiKey,
+        model: creds.model,
+        proxy: creds.proxy,
         messages: [
           { role: 'system', content: forced },
           { role: 'user', content: chunks[i] },

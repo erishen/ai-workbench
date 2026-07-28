@@ -1,5 +1,6 @@
-import TranslateModule from '../modules/TranslateModule';
 import ChatModule from '../modules/ChatModule';
+import TranslateModule from '../modules/TranslateModule';
+import WorkflowModule from '../modules/WorkflowModule';
 
 // 功能模块注册表：后续新增 AI 工作流，只需在此数组加一项 + 写一个模块组件。
 // component 直接绑定渲染组件，App 按 active 渲染对应模块 —— 新增模块无需改动 App.js。
@@ -18,5 +19,12 @@ export const MODULES = [
     icon: '🌐',
     desc: '输入网页 URL，自动识别中/英文并互译（中→英、英→中）。',
     component: TranslateModule,
+  },
+  {
+    id: 'workflow',
+    name: '工作流编排',
+    icon: '🔄',
+    desc: 'Planner-Specialist-Evaluator 工作流引擎（证据驱动验证）。',
+    component: WorkflowModule,
   },
 ];

@@ -15,6 +15,8 @@ export default function TranslateModule() {
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
   const [usage, setUsage] = useState(null); // 实时累计 token（来自进度推送）
+  const [configs, setConfigs] = useState([]); // 模型配置列表（来自「设置」）
+  const [configId, setConfigId] = useState(''); // 当前选用的模型配置 id（默认主配置）
   const logBoxRef = useRef(null);
 
   useEffect(() => {
@@ -28,6 +30,17 @@ export default function TranslateModule() {
     });
     // 返回清理函数：StrictMode 下组件卸载时移除监听器，避免重复订阅导致日志翻倍
     return off;
+  }, []);
+
+  // 载入「设置」中的模型配置列表，默认选用主配置（列表首个）
+  useEffect(() => {
+    if (!isElectron) return;
+    window.electronAPI.getSettings?.().then((s) => {
+      if (s && Array.isArray(s.modelConfigs) && s.modelConfigs.length) {
+        setConfigs(s.modelConfigs);
+        setConfigId(s.modelConfigs[0].id);
+      }
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -48,7 +61,7 @@ export default function TranslateModule() {
     }
     setLoading(true);
     try {
-      const res = await window.electronAPI.translateUrl(url.trim());
+      const res = await window.electronAPI.translateUrl(url.trim(), configId || undefined);
       setResult(res);
     } catch (e) {
       setError(e.message || '翻译失败');
@@ -67,14 +80,30 @@ export default function TranslateModule() {
       : '英文 → 中文'
     : '';
   const pct = progress && progress.total ? Math.round((progress.index / progress.total) * 100) : 0;
+  const active = configs.find((c) => c.id === configId) || configs[0] || null;
 
   return (
     <div className="module">
       <header className="module-header">
         <h1>页面翻译</h1>
-        <p>输入网页 URL，调用外部大模型自动识别中/英文并互译。</p>
+        <p>输入网页 URL，调用外部大模型自动识别中/英文并互译。可在下方切换「设置」中已配置的模型（支持跨服务商）。</p>
       </header>
       <section className="card">
+        {configs.length > 0 && (
+          <div className="model-pick">
+            <label>使用模型配置</label>
+            <select value={configId} onChange={(e) => setConfigId(e.target.value)} disabled={loading}>
+              {configs.map((c, i) => (
+                <option key={c.id} value={c.id}>
+                  {c.label || c.model} · {c.model}{i === 0 ? '（主）' : ''}
+                </option>
+              ))}
+            </select>
+            {active && (
+              <div className="model-active">当前生效：{active.label || active.model} · {active.model}</div>
+            )}
+          </div>
+        )}
         <div className="field">
           <label>页面 URL</label>
           <input
