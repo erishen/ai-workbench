@@ -54,7 +54,7 @@ window.electronAPI.onMessage('update-message', (payload) => {
 ## 目录结构
 
 ```
-electron-react-app/
+ai-workbench/
 ├── electron.js        # 主进程：窗口、加载 URL、IPC handler
 ├── preload.js         # 预加载：contextBridge 安全桥
 ├── main/              # 主进程业务逻辑（workflow / executor / llm / project ...）

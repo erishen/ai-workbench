@@ -1,5 +1,5 @@
 {
-  "name": "electron-react-app",
+  "name": "ai-workbench",
   "version": "0.1.0",
   "private": true,
   "description": "本地桌面 AI 工作台：可配置外部大模型，提供页面翻译等 AI 能力模块。",
