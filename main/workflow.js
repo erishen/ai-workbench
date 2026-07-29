@@ -11,7 +11,7 @@ const { collectProjectContext } = require('./project');
 const { runShellCommand, runReadOnlyCommand, isDangerous, forbiddenReason, requestApproval, resetApprovals, isDirApproved, READONLY_ALLOWED } = require('./executor');
 const { saveRunLog } = require('./runlog');
 const { detectCapabilities } = require('./capabilities');
-const { extractJson, extractFrom, extractCommands, stripPromptMarkers, inferProjectDir, normalizePathTok, collectCreatedDirs, normalizeVerdict, computeOverall, normalizeSteps, normalizePhases } = require('./workflow-parse');
+const { extractJson, safeParseVerification, extractFrom, extractCommands, stripPromptMarkers, inferProjectDir, normalizePathTok, collectCreatedDirs, normalizeVerdict, computeOverall, normalizeSteps, normalizePhases } = require('./workflow-parse');
 const { PLANNER_SYS, SPECIALIST_SYS, EVALUATOR_SYS, REVIEWER_SYS, TASK_PROFILES, SPECIALIST_RULES, renderSpecialistExecRules, detectTaskType } = require('./prompts');
 
 // 调试落盘：仅本机排查用，不含任何密钥。
@@ -182,18 +182,18 @@ async function runVerificationPhase({ sysPrompt, roleKey, task, step, specialist
     ],
   });
   const text = extractFrom(first);
-  let v;
-  try {
-    v = extractJson(text);
-  } catch (e) {
-    debugAppend('WORKFLOW-' + roleKey.toUpperCase() + '-RAW', text);
-    throw new Error(`阶段 ${roleKey} 步骤 ${stepId} 返回无法解析：${e.message}`);
-  }
-  let verdict = normalizeVerdict(v);
   const verifications = [];
-  if (Array.isArray(v.verify) && v.verify.length) {
-    on({ type: 'phase', phase: roleKey, message: `独立取证（${v.verify.length} 条只读命令）：${step.title}` });
-    for (const vc of v.verify.slice(0, 8)) {
+  const parsed = safeParseVerification(text);
+  if (!parsed.ok) {
+    debugAppend('WORKFLOW-' + roleKey.toUpperCase() + '-RAW', text);
+    // 验证阶段返回非 JSON（模型未按规约输出、泄漏了 tool_call/XML 标签等）：
+    // 按「默认从宽、FAIL 从严」原则宽松降级为 PARTIAL，不触发 fail-fast、不中断整条工作流。
+    return { verdict: parsed.verdict, verifications };
+  }
+  let verdict = normalizeVerdict(parsed.value);
+  if (Array.isArray(parsed.value.verify) && parsed.value.verify.length) {
+    on({ type: 'phase', phase: roleKey, message: `独立取证（${parsed.value.verify.length} 条只读命令）：${step.title}` });
+    for (const vc of parsed.value.verify.slice(0, 8)) {
       const vr = await runReadOnlyCommand(String(vc || ''), projectDir, { timeoutMs: 30000, signal });
       const entry = {
         command: vr.command,
@@ -234,7 +234,7 @@ async function runVerificationPhase({ sysPrompt, roleKey, task, step, specialist
 // ---- 结果规整 ----
 
 function buildReport(task, results, overall, projCtx) {
-  const counts = { PASS: 0, PARTIAL: 0, FAIL: 0, BLOCKED: 0 };
+  const counts = { PASS: 0, PARTIAL: 0, FAIL: 0, BLOCKED: 0, SKIPPED: 0 };
   results.forEach((r) => {
     const v = (r.verdict && r.verdict.verdict) || 'FAIL';
     counts[v] = (counts[v] || 0) + 1;
@@ -245,7 +245,7 @@ function buildReport(task, results, overall, projCtx) {
   lines.push(`**任务：** ${task}`);
   if (projCtx) lines.push(`**项目：** ${projCtx.name}（${projCtx.dir}）`);
   lines.push(
-    `**整体结论：** ${overall}（PASS ${counts.PASS} / PARTIAL ${counts.PARTIAL} / FAIL ${counts.FAIL} / BLOCKED ${counts.BLOCKED}）`
+    `**整体结论：** ${overall}（PASS ${counts.PASS} / PARTIAL ${counts.PARTIAL} / FAIL ${counts.FAIL} / BLOCKED ${counts.BLOCKED}${counts.SKIPPED ? ` / SKIPPED ${counts.SKIPPED}` : ''}）`
   );
   lines.push('');
   results.forEach((r, i) => {
@@ -466,7 +466,7 @@ async function runWorkflow({ task, settings, projectDir, signal, onEvent, models
         }
         if (blockedBy.length) {
           const verdict = {
-            verdict: 'BLOCKED',
+            verdict: 'SKIPPED',
             acResults: [],
             feedback: `被 fail-fast 跳过：前置步骤 ${blockedBy
               .map((b) => `"${b.title}"(${b.verdict})`)
@@ -597,12 +597,12 @@ async function runWorkflow({ task, settings, projectDir, signal, onEvent, models
 
     // 3) 汇总报告
     overall = computeOverall(stepResults);
-    const counts = { PASS: 0, PARTIAL: 0, FAIL: 0, BLOCKED: 0 };
+    const counts = { PASS: 0, PARTIAL: 0, FAIL: 0, BLOCKED: 0, SKIPPED: 0 };
     stepResults.forEach((r) => {
       const v = (r.verdict && r.verdict.verdict) || 'FAIL';
       counts[v] = (counts[v] || 0) + 1;
     });
-    summary = `共 ${stepResults.length} 步：PASS ${counts.PASS} / PARTIAL ${counts.PARTIAL} / FAIL ${counts.FAIL} / BLOCKED ${counts.BLOCKED}`;
+    summary = `共 ${stepResults.length} 步：PASS ${counts.PASS} / PARTIAL ${counts.PARTIAL} / FAIL ${counts.FAIL} / BLOCKED ${counts.BLOCKED}${counts.SKIPPED ? ` / SKIPPED ${counts.SKIPPED}` : ''}`;
     report = buildReport(task, stepResults, overall, projCtx);
     on({ type: 'final', overall, summary, report, steps: stepResults });
     // 成功归档：留下完整可审计的运行记录

@@ -44,6 +44,26 @@ function extractJson(text) {
   throw new Error('无法解析为 JSON（原始片段：' + s.slice(0, 200) + '）');
 }
 
+// 解析「验证阶段」（evaluator / reviewer）的 LLM 返回，失败则宽松降级。
+// 设计动机：模型偶尔会不按规约输出 JSON（泄漏 <tool_call>/<invoke> 等工具标签、或写前置废话），
+// 若直接抛错会中断整条工作流。此处把「解析失败」转换为一个 PARTIAL 兜底 verdict，
+// 与「默认从宽、FAIL 从严」原则一致——验证阶段产出不了结构化结论时，绝不因此 FAIL 或崩溃。
+// 返回：{ ok: true, value: 解析对象 } 或 { ok: false, verdict: 兜底 PARTIAL }。
+function safeParseVerification(text) {
+  try {
+    return { ok: true, value: extractJson(text) };
+  } catch (e) {
+    return {
+      ok: false,
+      verdict: {
+        verdict: 'PARTIAL',
+        acResults: [],
+        feedback: `验证阶段返回无法解析为 JSON，已按宽松处理（不触发 fail-fast）。${String((e && e.message) || '').slice(0, 160)}`,
+      },
+    };
+  }
+}
+
 // 从 LLM 返回对象中取文本：优先 content，空则回退 reasoning（推理模型常见）
 function extractFrom(res) {
   if (!res || typeof res !== 'object') return '';
@@ -154,11 +174,11 @@ function collectCreatedDirs(executions) {
 
 function normalizeVerdict(v) {
   if (!v || typeof v !== 'object') {
-    return { verdict: 'FAIL', acResults: [], feedback: 'Evaluator 未返回有效结构' };
+    return { verdict: 'PARTIAL', acResults: [], feedback: 'Evaluator 未返回有效结构，按宽松处理（不触发 fail-fast）' };
   }
-  const allowed = ['PASS', 'PARTIAL', 'FAIL', 'BLOCKED'];
+  const allowed = ['PASS', 'PARTIAL', 'FAIL', 'BLOCKED', 'SKIPPED'];
   let verdict = String(v.verdict || '').toUpperCase();
-  if (!allowed.includes(verdict)) verdict = 'FAIL';
+  if (!allowed.includes(verdict)) verdict = 'PARTIAL';
   let acResults = Array.isArray(v.acResults)
     ? v.acResults.map((r) => {
         let st = String(r.status || 'FAIL').toUpperCase();
@@ -175,6 +195,7 @@ function computeOverall(results) {
   let max = 0;
   for (const r of results) {
     const v = (r.verdict && r.verdict.verdict) || 'FAIL';
+    if (v === 'SKIPPED') continue; // 被 fail-fast 跳过的步骤不影响整体结论
     max = Math.max(max, rank[v] != null ? rank[v] : 2);
   }
   const inv = { 0: 'PASS', 1: 'PARTIAL', 2: 'FAIL', 3: 'BLOCKED' };
@@ -240,6 +261,7 @@ function normalizePhases(rawPhases) {
 
 module.exports = {
   extractJson,
+  safeParseVerification,
   extractFrom,
   extractCommands,
   stripPromptMarkers,
