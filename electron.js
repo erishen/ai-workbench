@@ -4,6 +4,25 @@ const path = require('path');
 const fs = require('fs');
 const { loadSettings, saveSettings, resolveModelConfig } = require('./main/settings');
 const { translateUrl } = require('./main/translate');
+
+// ---- 抑制 Chromium 在公司网络下的 TLS 握手噪音（ERR_SSL_PROTOCOL_ERROR / -101）----
+// 根因：本应用所有对外请求都走 Node 层（undici），已正确经 HTTPS_PROXY 用 CONNECT 隧道联通；
+// 但 Chromium 自带若干后台联网（captive portal 探测、组件更新、安全浏览等）在启动/运行时
+// 会向外部端点直连，被公司透明 TLS 拦截网关打断握手（直连会破坏 TLS1.3 ClientHello）。
+// 上一版强制「直连」反而触发网关拦截。正确做法：让 Chromium 复用与 undici 相同的 HTTPS_PROXY
+// 走 CONNECT 隧道（同 undici 的成功路径），并对 localhost 走 bypass（dev 服务器在 localhost）。
+app.commandLine.appendSwitch('disable-background-networking');
+app.commandLine.appendSwitch('disable-component-update');
+// 关闭 Chromium 的「安全 DNS / DNS-over-HTTPS」自动升级：否则它会向 dns.google、chrome.cloudflare-dns.com
+// 发起 DoH TLS 握手，在本机 MITM 环境下证书校验失败（CN=erishen 本地 CA 无匹配签发者），
+// 反复刷 CertVerifyProcBuiltin 错误。本应用 DNS 全在 Node 层完成，Chromium 不需要 DoH。
+app.commandLine.appendSwitch('disable-features', 'DnsOverHttpsUpgrade,CaptivePortal,Translate,MediaRouter,DialMediaRouteProvider');
+app.commandLine.appendSwitch('disable-sync');
+app.commandLine.appendSwitch('no-first-run');
+// 本应用所有外部请求都在 Node 层（undici）完成，Chromium 自身不需要任何外部联网。
+// 把【外部】主机名解析到 127.0.0.1（仅 localhost 例外，保证 dev 服务器 http://localhost:5180 直连），
+// 双保险：即便仍有漏网的后台连接，也连不到真实外部服务器、不会触发 TLS 握手 / 证书校验错误。
+app.commandLine.appendSwitch('host-resolver-rules', 'MAP * 127.0.0.1, EXCLUDE localhost');
 const { chatStream } = require('./main/llm');
 const { runWorkflow } = require('./main/workflow');
 const { resetApprovals, resolveApproval } = require('./main/executor');
