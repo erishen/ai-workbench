@@ -70,6 +70,8 @@ ai-workbench/
 │   └── project.js          # optional read-only project context collector
 ├── src/               # React renderer (CRA structure)
 │   └── modules/
+│       ├── ChatModule.js             # multi-turn LLM chat (streaming)
+│       ├── TranslateModule.js        # URL → zh/en translation
 │       ├── WorkflowModule.js         # autonomous PSE runner UI
 │       └── WorkflowDesignerModule.js # graphical workflow designer
 ├── build/             # CRA production build output (loaded by Electron when packaged)
@@ -83,10 +85,12 @@ Core idea: **role separation (Planner / Specialist / Evaluator / Reviewer) + evi
 
 - **Planner**: breaks the task into independently executable and verifiable steps (each with acceptance criteria / AC).
 - **Specialist**: produces deliverables per step and can run real commands (compile, test, start services, ...).
-- **Evaluator**: **collects evidence independently** (exit code, stdout/stderr, port probing, test reports) and decides PASS / PARTIAL / FAIL / BLOCKED. It does **not** trust the executor's self-report.
+- **Evaluator**: **collects evidence independently** (exit code, stdout/stderr, port probing, test reports) and decides `PASS` / `PARTIAL` / `FAIL` / `BLOCKED`. It does **not** trust the executor's self-report. (`SKIPPED` is engine-assigned when a later step is skipped by fail-fast; see below.)
 - **Reviewer** (optional gate): a second, independent pass that re-verifies before the step is accepted.
 
 Each step runs a configurable `phases` sequence (default `specialist → evaluator`; `reviewer` can be appended). PARTIAL/FAIL from the **last verdict-issuing phase** triggers a bounded whole-step retry (≤ `maxRetry`), with evidence retained each time.
+
+When a step ends `FAIL` or `BLOCKED`, all subsequent steps are marked `SKIPPED` and not executed (**fail-fast**). `SKIPPED` steps never influence the overall verdict, so one genuine failure cannot cascade into a string of false FAILs.
 
 ### Two operating modes
 
@@ -120,6 +124,9 @@ Task type is coarsely classified by `detectTaskType(task)`, defaulting to `gener
 ### Verification discipline & guardrails
 
 - The Evaluator/Reviewer only look at **real run results**, never the Specialist's "I'm done" self-report.
+- A step ending `FAIL`/`BLOCKED` triggers **fail-fast**: later steps become `SKIPPED` (not executed, not counted toward the verdict).
+- **FAIL is the exception, not the default.** The verification policy is *lenient by default, strict on FAIL*: `FAIL` is reserved for defects that evidence can actually refute — fabricated content, deliverables that cannot run, or acceptance criteria that are substantially unmet. Exploratory / review / collection steps that did the core work (e.g. really read the code, really collected the files) are at most `PARTIAL`, never `FAIL` merely for being "not production-grade" or "improvable". This keeps the loop from over-failing open-ended tasks.
+- **Safe degradation:** if a verification phase fails to emit parseable JSON (e.g. the model leaks a `<tool_call>`/XML tag instead of the verdict object), the step is downgraded to `PARTIAL` and the workflow continues — it never crashes the whole run.
 - Failed retries are bounded and **leave evidence each time**; if it does not converge, it reports FAIL honestly instead of faking success.
 - Command execution is **sandbox-constrained**: a read-only allow-list (`READONLY_ALLOWED`), process-group kill on abort, and removal of `sed`/`awk` to prevent write-ban bypass. It is not an unrestricted shell.
 - Every run is archived by `runlog.js` into `~/Library/Application Support/ai-workbench/logs/` as both structured JSON and a human-readable markdown report.
@@ -136,3 +143,15 @@ The graphical designer (`src/modules/WorkflowDesignerModule.js`) lets you author
 - **Detail panel**: edit each step's title / description / acceptance criteria / `verify` hints / dependencies / `phases` (add, remove, reorder `specialist` / `evaluator` / `reviewer`) / retry limit / retry trigger.
 - **Run**: hand the authored steps to `workflow:run`; the engine skips the Planner and drives them exactly. A **"Load example orchestration"** button restores a 3-step sample (specialist → evaluator → reviewer with a dependency chain).
 - **Default**: opens blank → autonomous mode (Planner auto-decomposes). The designer is an optional, advanced entry point, not the primary path.
+
+## Chat module
+
+A simple multi-turn chat UI (`src/modules/ChatModule.js`) for talking to any OpenAI-compatible model configured in Settings.
+
+- Responses stream token-by-token.
+- Reuses the same baseURL / model / API-key presets as the workflow engine (credentials are stored in the macOS Keychain), so no extra setup is needed.
+- Bottom action bar: **Send** (shows a disabled "Replying…" state while streaming) and **Clear conversation**.
+
+## Translate module
+
+Paste a web-page URL (`src/modules/TranslateModule.js`); the module detects whether the page is Chinese or English and translates it into the other language. Handy for reading foreign documentation inline.

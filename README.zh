@@ -70,6 +70,8 @@ ai-workbench/
 │   └── project.js          # 可选：只读项目上下文采集
 ├── src/               # React 渲染进程（CRA 结构）
 │   └── modules/
+│       ├── ChatModule.js             # 多轮大模型对话（流式）
+│       ├── TranslateModule.js        # 网页 URL → 中英互译
 │       ├── WorkflowModule.js         # 自主型 PSE 运行 UI
 │       └── WorkflowDesignerModule.js # 图形化工作流设计器
 ├── build/             # CRA 生产构建产物（打包时由 Electron 加载）
@@ -83,10 +85,12 @@ ai-workbench/
 
 - **Planner**：把任务拆解成可独立执行、可独立验收的步骤（每步带验收标准 AC）。
 - **Specialist**：按步骤产出交付物，可执行真实命令（编译、跑测试、起服务等）。
-- **Evaluator**：**独立采集证据**（退出码、标准输出、端口探活、测试报告）判 PASS / PARTIAL / FAIL / BLOCKED，**不采信执行者自述**。
+- **Evaluator**：**独立采集证据**（退出码、标准输出、端口探活、测试报告）判 `PASS` / `PARTIAL` / `FAIL` / `BLOCKED`，**不采信执行者自述**。（`SKIPPED` 由引擎在 fail-fast 跳过后续步骤时赋值，见下文。）
 - **Reviewer**（可选闸门）：第二道独立复核，步骤被接受前再验一遍。
 
 每个步骤跑一条可配置的 `phases` 序列（默认 `specialist → evaluator`；可追加 `reviewer`）。**最后一个出 verdict 的阶段**判 PARTIAL/FAIL 时，触发有界「整步重试」（≤ `maxRetry`），且每次保留证据。
+
+当某步判 `FAIL` 或 `BLOCKED` 时，其后续所有步骤会被标记 `SKIPPED` 并不再执行（**fail-fast**）。`SKIPPED` 步骤不计入整体结论，因此一个真实的失败不会级联成一连串假 FAIL。
 
 ### 两种运行模式
 
@@ -120,6 +124,9 @@ ai-workbench/
 ### 验证纪律与护栏
 
 - Evaluator / Reviewer 只看**真实运行结果**，不采纳 Specialist 的"我已完成"自述。
+- 某步 `FAIL`/`BLOCKED` 触发 **fail-fast**：后续步骤变为 `SKIPPED`（不执行、不计入结论）。
+- **FAIL 是例外，不是默认。** 验证策略「默认从宽、FAIL 从严」：`FAIL` 仅保留给"证据可证伪的缺陷"——虚构内容、无法运行的交付物、验收标准被实质性未满足。探索 / 审查 / 收集类步骤只要做了核心动作（真读了代码、真采集到了文件），**至多判 PARTIAL**，绝不会因为"不够生产级""可改进"就 FAIL。这避免了开放式任务被过度判失败。
+- **安全降级**：若验证阶段未能产出可解析的 JSON（例如模型泄漏了 `<tool_call>`/XML 标签而非 verdict 对象），该步降级为 `PARTIAL`、工作流继续，而不会让整条运行崩溃。
 - 失败重试有界且**每次留证据**，收敛不了如实报 FAIL，不假装通过。
 - 命令执行受**沙箱约束**：只读白名单（`READONLY_ALLOWED`）、中止时杀进程组、移除 `sed`/`awk` 防写禁令绕过——非无限制 shell。
 - 每次运行由 `runlog.js` 归档到 `~/Library/Application Support/ai-workbench/logs/`，同时存结构化 JSON 与人读 markdown 报告。
@@ -136,3 +143,15 @@ LLM 凭证存于 **macOS 系统钥匙串**（经 `security` 命令）；`setting
 - **详情面板**：编辑每步的标题 / 描述 / 验收标准 / `verify` 要点 / 依赖 / `phases`（增删重排 `specialist` / `evaluator` / `reviewer`）/ 重试上限 / 触发重试判定。
 - **运行**：把作者化步骤交给 `workflow:run`；引擎跳过 Planner 严格按步骤执行。点 **「加载示例编排」** 可恢复一套 3 步样例（specialist → evaluator → reviewer，含依赖链）。
 - **默认**：打开即空白 → 自主模式（Planner 自动拆解）。设计器是可选的高级入口，非主路径。
+
+## 对话模块（Chat）
+
+一个轻量多轮对话界面（`src/modules/ChatModule.js`），用于和「设置」中配置的任何 OpenAI 兼容模型聊天。
+
+- 响应逐 token 流式渲染。
+- 复用与工作流引擎相同的 baseURL / model / API Key 预设（凭证存于 macOS 钥匙串），无需额外配置。
+- 底部操作栏：**发送**（流式期间显示为禁用的「正在回复…」态）与**清空对话**。
+
+## 翻译模块（Translate）
+
+粘贴一个网页 URL（`src/modules/TranslateModule.js`），模块会自动识别页面是中/英文并互译。适合在应用内快速阅读外文文档。
