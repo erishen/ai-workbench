@@ -254,6 +254,26 @@
   background: rgba(255, 255, 255, 0.08);
   color: #dfe4ee;
 }
+.btn.danger {
+  background: linear-gradient(135deg, #ff6b6b, #ff4d6d);
+  color: #fff;
+}
+.btn.danger:hover {
+  filter: brightness(1.08);
+}
+.btn.danger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.text-input {
+  background: #0d1320;
+  border: 1px solid #2a3344;
+  border-radius: 8px;
+  color: #e6e9ef;
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+}
 
 /* ---- 多模型列表编辑器 ---- */
 .model-list {
@@ -975,10 +995,14 @@
 .wf-log-line.retry .wf-log-msg { color: #ffd479; }
 .wf-log-line.final .wf-log-msg { color: #7ee787; font-weight: 600; }
 .wf-log-line.error .wf-log-msg { color: #ff9b9b; font-weight: 600; }
+.wf-log-line.ok .wf-log-msg { color: #7ee787; }
+.wf-log-line.warn .wf-log-msg { color: #ffb86b; }
 .wf-log-line.v-pass .wf-log-msg { color: #7ee787; }
 .wf-log-line.v-partial .wf-log-msg { color: #ffd479; }
 .wf-log-line.v-fail .wf-log-msg { color: #ff9b9b; }
 .wf-log-line.v-blocked .wf-log-msg { color: #9aa3b5; }
+.wf-log-line.verify .wf-log-msg { color: #d2a8ff; font-weight: 600; }
+.wf-log-line.dim .wf-log-msg { color: #6e7787; font-size: 12px; word-break: break-all; }
 
 /* 导出代码 */
 .wf-export {

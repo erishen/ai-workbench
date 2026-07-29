@@ -131,6 +131,7 @@ export default function WorkflowModule() {
   const [analysis, setAnalysis] = useState('');
   const [steps, setSteps] = useState([]); // [{ id,index,title,description,ac,phase,specialist,evaluatorThinking,verdict,retries }]
   const [finalReport, setFinalReport] = useState(null); // { overall, summary, report, steps }
+  const [runSaved, setRunSaved] = useState(null); // { jsonPath, mdPath, error } 本次运行归档结果
   const [error, setError] = useState('');
   const [aborted, setAborted] = useState(false);
   const [needProject, setNeedProject] = useState(false); // 点示例后若未选项目，提示先选
@@ -192,6 +193,17 @@ export default function WorkflowModule() {
           setProjectInfo({ name: ev.name, dir: ev.dir, chars: ev.chars });
           setRawLog((l) => [...l, { t: Date.now(), kind: 'info', label: `已载入项目上下文：${ev.name}（${ev.chars} 字符）` }]);
           break;
+        case 'capabilities': {
+          const c = ev.caps || {};
+          const avail = Object.keys(c).filter((k) => k !== '_stacks' && c[k]).join(', ');
+          const missing = Object.keys(c).filter((k) => k !== '_stacks' && !c[k]).join(', ');
+          setRawLog((l) => [
+            ...l,
+            { t: Date.now(), kind: 'info', label: `运行环境工具链探测：${avail || '（无可用）'}` },
+            { t: Date.now(), kind: 'warn', label: missing ? `缺失工具链：${missing}` : '缺失工具链：无（全可用）' },
+          ]);
+          break;
+        }
         case 'plan-stream':
           if (typeof ev.delta === 'string') setPlanThinking((t) => t + ev.delta);
           break;
@@ -243,6 +255,21 @@ export default function WorkflowModule() {
           const vv = ((ev.verdict && ev.verdict.verdict) || '').toUpperCase();
           const vt = stepTitleRef.current[ev.stepId] || ev.stepId;
           setRawLog((l) => [...l, { t: Date.now(), kind: `v-${vv.toLowerCase()}`, label: `步骤「${vt}」判决：${vv}` }]);
+          break;
+        }
+        case 'evaluator-verify': {
+          const e = ev.entry || {};
+          const cmd = (e.command || '').trim();
+          const vt = stepTitleRef.current[ev.stepId] || ev.stepId;
+          setRawLog((l) => [
+            ...l,
+            { t: Date.now(), kind: 'verify', label: `🔍 Evaluator 独立取证（步骤「${vt}」）：${cmd.slice(0, 80)}${cmd.length > 80 ? '…' : ''}` },
+            ...(e.blocked
+              ? [{ t: Date.now(), kind: 'warn', label: `↳ 被只读安全策略拒绝：${String(e.error || '').slice(0, 160)}` }]
+              : (e.stdout || '').trim()
+                ? [{ t: Date.now(), kind: 'dim', label: `↳ ${e.stdout.trim().slice(0, 400).replace(/\n/g, ' ⏎ ')}` }]
+                : []),
+          ]);
           break;
         }
         case 'retry': {
@@ -310,6 +337,9 @@ export default function WorkflowModule() {
           setRunning(false);
           setStopping(false);
           setRawLog((l) => [...l, { t: Date.now(), kind: 'final', label: `工作流结束：整体 ${ev.overall}` }]);
+          break;
+        case 'run-saved':
+          setRunSaved(ev && ev.error ? { error: ev.error } : ev);
           break;
         case 'error':
           setError(ev.message || '工作流出错');
@@ -396,6 +426,7 @@ export default function WorkflowModule() {
     setSteps([]);
     setFinalReport(null);
     setProjectInfo(null);
+    setRunSaved(null);
     setExecutionsByStep({});
     setApproval(null);
     runStartRef.current = Date.now();
@@ -451,6 +482,7 @@ export default function WorkflowModule() {
     setSteps([]);
     setFinalReport(null);
     setPhase(null);
+    setRunSaved(null);
     setRawLog([]);
   };
 
@@ -738,8 +770,21 @@ export default function WorkflowModule() {
             <button className="btn ghost" style={{ marginLeft: 'auto' }} onClick={onCopy}>
               {copied ? '已复制' : '复制报告'}
             </button>
+            <button className="btn ghost" onClick={() => window.electronAPI.workflowOpenLogs?.()} title="打开运行日志目录（每次运行的结构化记录归档在此）">
+              运行日志目录
+            </button>
           </div>
           <pre className="result-text" style={{ maxHeight: 520 }}>{finalReport.report}</pre>
+          {runSaved && !runSaved.error && (
+            <div className="muted" style={{ marginTop: 6, fontSize: 12 }} title={runSaved.jsonPath}>
+              ✓ 本次运行已归档：{runSaved.jsonPath ? runSaved.jsonPath.split('/').slice(-1)[0] : ''}（JSON + Markdown）
+            </div>
+          )}
+          {runSaved && runSaved.error && (
+            <div className="muted" style={{ marginTop: 6, fontSize: 12, color: '#ff9b9b' }}>
+              运行记录归档失败：{runSaved.error}
+            </div>
+          )}
 
           {/* 非 PASS 时提示：导出的代码未经 Evaluator 验证 */}
           {finalReport.overall !== 'PASS' && (
