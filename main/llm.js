@@ -158,7 +158,7 @@ async function chatCompletion({ baseURL, apiKey, model, messages, temperature = 
 
 // 流式对话：与 chatCompletion 协议一致，但逐 token 通过 onToken(delta) 回调吐出，
 // 适配聊天界面的实时打字效果。返回 { content, usage }。usage 取决于端点是否回传（可能全 0）。
-async function chatStream({ baseURL, apiKey, model, messages, temperature = 0.7, signal, onToken, onLog, proxy, maxRetry = 3 } = {}) {
+async function chatStream({ baseURL, apiKey, model, messages, temperature = 0.7, signal, onToken, onLog, proxy, maxRetry = 3, maxTokens } = {}) {
   const cleanBase = String(baseURL || '').replace(/\/+$/, '');
   const url = cleanBase + '/chat/completions';
   let host = cleanBase;
@@ -181,7 +181,9 @@ async function chatStream({ baseURL, apiKey, model, messages, temperature = 0.7,
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({ model, messages, temperature, stream: true }),
+        body: JSON.stringify(
+          Object.assign({ model, messages, temperature, stream: true }, maxTokens != null ? { max_tokens: maxTokens } : {})
+        ),
         signal,
       },
       proxy

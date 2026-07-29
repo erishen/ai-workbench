@@ -1,5 +1,5 @@
 // electron.js
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { loadSettings, saveSettings, resolveModelConfig } = require('./main/settings');
@@ -8,6 +8,7 @@ const { chatStream } = require('./main/llm');
 const { runWorkflow } = require('./main/workflow');
 const { resetApprovals, resolveApproval } = require('./main/executor');
 const { extractFiles, writeFiles } = require('./main/export');
+const { logsDir } = require('./main/runlog');
 
 // 调试落盘：仅本机排查用，不含任何密钥。聊天/翻译模块切换模型是否生效，可直接看 /tmp/aw-debug.log。
 function debugAppend(tag, text) {
@@ -64,7 +65,9 @@ function createWindow() {
   // 生产环境用 loadFile：内部走 pathToFileURL，自动编码 app 名中的空格与 asar 路径，
   // 规避「Agent Workflow.app」含空格导致 file:// 未编码 -> Chromium 解析失败 -> 白屏。
   if (!app.isPackaged) {
-    mainWindow.loadURL('http://localhost:3000').catch((e) => console.error('[main] load dev url failed:', e));
+    // dev 端口与 package.json 的 dev 脚本（PORT / ELECTRON_DEV_PORT）对齐，避免 wait-on 硬绑 3000 因端口冲突静默卡死
+    const DEV_PORT = process.env.ELECTRON_DEV_PORT || 3000;
+    mainWindow.loadURL('http://localhost:' + DEV_PORT).catch((e) => console.error('[main] load dev url failed:', e));
   } else {
     mainWindow.loadFile(path.join(__dirname, 'build', 'index.html'))
       .catch((e) => { try { dialog.showErrorBox('页面加载失败', String(e)); } catch (_) {} });
@@ -157,7 +160,7 @@ ipcMain.handle('workflow:pickProject', async () => {
   return { canceled: false, dir, name: path.basename(dir) };
 });
 
-ipcMain.handle('workflow:run', async (event, { task, projectDir, models, allowExec }) => {
+ipcMain.handle('workflow:run', async (event, { task, projectDir, models, allowExec, taskTypeOverride, maxRetry, steps }) => {
   const settings = loadSettings();
   if (!settings.apiKey) {
     throw new Error('请先在「设置」中填写外部大模型的 API Key');
@@ -187,6 +190,9 @@ ipcMain.handle('workflow:run', async (event, { task, projectDir, models, allowEx
     signal: ac.signal,
     models: models && typeof models === 'object' ? models : undefined,
     allowExec: !!allowExec,
+    taskTypeOverride: typeof taskTypeOverride === 'string' ? taskTypeOverride : undefined,
+    maxRetry: typeof maxRetry === 'number' ? maxRetry : undefined,
+    steps: Array.isArray(steps) && steps.length ? steps : undefined,
     onEvent: (ev) => {
       if (mainWindow) mainWindow.webContents.send('workflow:progress', ev);
     },
@@ -212,6 +218,17 @@ ipcMain.handle('workflow:stop', () => {
     return true;
   }
   return false;
+});
+
+// 打开运行日志目录（开发期项目根 logs/，打包后 userData/logs）：每次 PSE 运行的结构化记录都归档在那里。
+ipcMain.handle('workflow:openLogs', async () => {
+  const dir = logsDir();
+  try {
+    await shell.openPath(dir);
+  } catch (_) {
+    /* 打开失败不影响主流程 */
+  }
+  return dir;
 });
 
 // 导出代码：从工作流交付物提取代码文件 -> 用户确认 -> 写入选定目录

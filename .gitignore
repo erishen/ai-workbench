@@ -26,6 +26,9 @@
 # 运行时用户凭据（位于 userData，不在项目内；若误放在项目根则忽略）
 settings.json
 
+# 开发期 PSE 运行日志（项目根 logs/；打包后改存 userData/logs，均不进库）
+/logs
+
 # electron-builder 打包产物（dmg / mac-arm64 等，体积大，不进库）
 /dist
 *.dmg

@@ -28,7 +28,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   workflowPickProject: () => ipcRenderer.invoke('workflow:pickProject'),
   workflowRun: (task, projectDir, models, allowExec) =>
     ipcRenderer.invoke('workflow:run', { task, projectDir, models, allowExec }),
+  // 设计器专用：直接传完整 options 对象（含 taskTypeOverride / maxRetry），避免改动上面 workflowRun 的 4 参签名。
+  workflowRunEx: (opts) => ipcRenderer.invoke('workflow:run', opts || {}),
   workflowStop: () => ipcRenderer.invoke('workflow:stop'),
+  workflowOpenLogs: () => ipcRenderer.invoke('workflow:openLogs'),
 
   // 受控命令执行：用户对「在某项目执行命令」授权弹窗的回执（对应 electron.js 的 workflow:exec-approve）
   workflowExecApprove: (payload) => ipcRenderer.invoke('workflow:exec-approve', payload),
@@ -48,6 +51,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 工作流设计器（WorkflowDesignerModule 用；对应 main/workflow.js 的 workflow:designer:* handler）
   saveWorkflow: (definition) => ipcRenderer.invoke('workflow:designer:save', definition),
   loadWorkflow: (id) => ipcRenderer.invoke('workflow:designer:load', id),
+  listWorkflows: () => ipcRenderer.invoke('workflow:designer:list'),
+  deleteWorkflow: (id) => ipcRenderer.invoke('workflow:designer:delete', id),
 
   // 主进程 -> 渲染进程（主进程主动推送）
   onMessage: (channel, callback) => {
