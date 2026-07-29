@@ -132,12 +132,40 @@ export default function SettingsView() {
               </div>
               <div className="field">
                 <label>Model</label>
-                <input
-                  list={`model-suggestions-${i}`}
-                  value={c.model || ''}
-                  onChange={(e) => onField(i, { model: e.target.value, label: e.target.value })}
-                  placeholder="如 gpt-4o-mini"
-                />
+                {c.provider && pm !== ALL_MODELS ? (
+                  <>
+                    <select
+                      value={pm.includes(c.model) ? c.model : '__custom__'}
+                      onChange={(e) => {
+                        if (e.target.value === '__custom__') {
+                          onField(i, { model: '', label: '' });
+                        } else {
+                          onField(i, { model: e.target.value, label: e.target.value });
+                        }
+                      }}
+                    >
+                      {pm.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                      <option value="__custom__">（自定义…）</option>
+                    </select>
+                    {!pm.includes(c.model) && (
+                      <input
+                        value={c.model || ''}
+                        onChange={(e) => onField(i, { model: e.target.value, label: e.target.value })}
+                        placeholder="输入自定义 Model ID"
+                        style={{ marginTop: 6 }}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <input
+                    list={`model-suggestions-${i}`}
+                    value={c.model || ''}
+                    onChange={(e) => onField(i, { model: e.target.value, label: e.target.value })}
+                    placeholder="如 gpt-4o-mini"
+                  />
+                )}
                 <datalist id={`model-suggestions-${i}`}>
                   {pm.map((m) => (<option key={m} value={m} />))}
                 </datalist>

@@ -202,6 +202,13 @@ export const PROVIDERS = [
     defaultModel: 'agnes-2.0-flash',
     models: ['agnes-2.0-flash'],
   },
+  {
+    id: 'scnet',
+    label: 'SCNET',
+    baseURL: 'https://api.scnet.cn/api/llm/v1',
+    defaultModel: 'Kimi-K2.6',
+    models: ['Kimi-K2.6', 'MiniMax-M2.5'],
+  },
 ];
 
 // 自定义时给一个通用模型建议（去重合并所有 provider 的模型）
