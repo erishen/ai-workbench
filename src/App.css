@@ -591,9 +591,21 @@
 }
 .chat-tools {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   margin-top: 10px;
+}
+/* 对话底部按钮：永不收缩/永不被挤压换行，长 token / 模型 badge 让位折到下一行 */
+.chat-tools .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.chat-tools .badge {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: normal;
+  word-break: break-word;
 }
 
 /* ---- PSE 工作流 ---- */

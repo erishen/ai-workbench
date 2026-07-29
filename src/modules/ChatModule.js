@@ -158,7 +158,7 @@ export default function ChatModule() {
         <div className="chat-box" ref={boxRef}>
           {messages.length === 0 && !streaming && (
             <div className="muted" style={{ textAlign: 'center', padding: '34px 0' }}>
-              还没有对话，在下方输入消息开始。（Cmd / Ctrl + Enter 发送）
+              还没有对话，在下方输入框输入消息开始吧。（⌘ / Ctrl + Enter 发送）
             </div>
           )}
           {messages.map((m, i) => {
@@ -181,15 +181,15 @@ export default function ChatModule() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={streaming ? '正在生成…' : '输入消息，Cmd / Ctrl + Enter 发送'}
+          placeholder={streaming ? '正在回复…' : '输入消息…（⌘ / Ctrl + Enter 发送）'}
           disabled={streaming}
         />
 
         <div className="chat-tools">
           <button className="btn primary" onClick={onSend} disabled={streaming || !input.trim()}>
-            {streaming ? '生成中…' : '发送'}
+            {streaming ? '正在回复…' : '发送'}
           </button>
-          <button className="btn ghost" onClick={onClear} disabled={streaming || messages.length === 0}>
+          <button className="btn ghost" onClick={onClear} disabled={streaming || messages.length === 0} title="清空当前会话的全部消息">
             清空对话
           </button>
           {usage && usage.totalTokens > 0 && (
