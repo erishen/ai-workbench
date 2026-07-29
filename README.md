@@ -21,7 +21,7 @@ pnpm install
 | Command | Purpose |
 | --- | --- |
 | `pnpm start` | Start only the CRA dev server (http://localhost:3000, for browser debugging) |
-| `pnpm run dev` | **One-shot dev mode**: launches the CRA dev server in the background, then auto-opens the Electron window once port 3000 is ready (`BROWSER=none` avoids a duplicate browser) |
+| `pnpm run dev` | **One-shot dev mode**: launches the CRA dev server in the background, then auto-opens the Electron window once port 5180 is ready (`BROWSER=none` avoids a duplicate browser) |
 | `pnpm run build` | CRA production build into `build/` (asset paths use `homepage: "./"` for relative paths, avoiding `file://` blank screen) |
 | `pnpm run electron` | Launch Electron alone (requires `build/` or a running dev server first) |
 | `pnpm run dist` | Package an installer with electron-builder, output to `dist/` |
@@ -33,7 +33,7 @@ pnpm run build   # 1. produce build/
 pnpm run dist    # 2. package the platform installer
 ```
 
-The packaged file list is in `package.json` `build.files` (includes `build/`, `electron.js`, `preload.js`) with `asar` enabled. The packaged product name is **Agent Workflow** (set via `productName`).
+The packaged file list is in `package.json` `build.files` (includes `build/`, `electron.js`, `preload.js`, `main/**/*`) with `asar` enabled. The packaged product name is **Agent Workflow** (set via `productName`).
 
 ## Renderer ↔ Main communication
 
@@ -59,20 +59,39 @@ To add a capability, follow two steps:
 ai-workbench/
 ├── electron.js        # main process: window, URL loading, IPC handlers
 ├── preload.js         # preload: contextBridge secure bridge
-├── main/              # main-process business logic (workflow / executor / llm / project ...)
+├── main/              # main-process business logic
+│   ├── workflow.js         # PSE orchestration (Planner→Specialist→Evaluator→[Reviewer]→Final)
+│   ├── workflow-parse.js   # pure step/phase normalization helpers
+│   ├── prompts.js          # role/system prompts + TASK_PROFILES
+│   ├── executor.js         # read-only sandboxed command runner + process-group kill
+│   ├── capabilities.js     # probe local toolchain, inject into Planner
+│   ├── runlog.js           # structured run archive (JSON + markdown)
+│   ├── llm.js              # LLM client (streaming)
+│   └── project.js          # optional read-only project context collector
 ├── src/               # React renderer (CRA structure)
+│   └── modules/
+│       ├── WorkflowModule.js         # autonomous PSE runner UI
+│       └── WorkflowDesignerModule.js # graphical workflow designer
 ├── build/             # CRA production build output (loaded by Electron when packaged)
 └── dist/              # electron-builder packaging output
 ```
 
 ## PSE Workflow module
 
-A desktop "Plan → Execute → Independently Verify" loop that turns a natural-language task into verifiable code/artifacts.
-Core idea: **Planner / Specialist / Evaluator role separation + evidence-driven verification**.
+A desktop **Plan → Execute → Independently Verify** loop that turns a natural-language task into verifiable code/artifacts.
+Core idea: **role separation (Planner / Specialist / Evaluator / Reviewer) + evidence-driven verification + governed autonomy**.
 
-- **Planner**: breaks the task into independently executable and independently verifiable steps (each with acceptance criteria / AC).
-- **Specialist**: produces deliverables per step and can run real commands (compile, run tests, start services, ...).
-- **Evaluator**: **collects evidence independently** (exit code, stdout/stderr, port probing, test reports) and decides PASS / PARTIAL / FAIL / BLOCKED. It does **not** trust the executor's self-report. PARTIAL/FAIL triggers bounded retries (≤3) with evidence retained each time.
+- **Planner**: breaks the task into independently executable and verifiable steps (each with acceptance criteria / AC).
+- **Specialist**: produces deliverables per step and can run real commands (compile, test, start services, ...).
+- **Evaluator**: **collects evidence independently** (exit code, stdout/stderr, port probing, test reports) and decides PASS / PARTIAL / FAIL / BLOCKED. It does **not** trust the executor's self-report.
+- **Reviewer** (optional gate): a second, independent pass that re-verifies before the step is accepted.
+
+Each step runs a configurable `phases` sequence (default `specialist → evaluator`; `reviewer` can be appended). PARTIAL/FAIL from the **last verdict-issuing phase** triggers a bounded whole-step retry (≤ `maxRetry`), with evidence retained each time.
+
+### Two operating modes
+
+- **Autonomous (default)**: leave the designer blank and the engine lets the **Planner auto-decompose** the task at runtime. This is "governed autonomy" — the model decides *how* to achieve each step, while the system constrains *what* it may do (see guardrails below).
+- **Orchestrated (optional)**: use the graphical Workflow Designer to pre-author fixed steps (titles, AC, dependencies, per-step `phases`, verify hints, retry limits). The engine then skips the Planner and drives those steps exactly.
 
 ### Task-agnostic
 
@@ -87,14 +106,33 @@ The orchestration skeleton is not bound to any stack. Stack-specific "build comm
 
 Task type is coarsely classified by `detectTaskType(task)`, defaulting to `generic`. A common kernel (create parent dir before writing, reuse the same project dir name across steps/retries, idempotent, never claim undone work) applies to all tasks.
 
+### Local capability awareness
+
+`capabilities.js` probes the **local toolchain** (`command -v` for php/composer/mvn/gradle/node/java/python3/go/...) and injects the result into the Planner, so it only plans tasks the machine can actually run — keeping the autonomous mode reliable instead of hallucinating impossible steps.
+
 ### Running & communication
 
-- Main process `main/workflow.js` exposes `workflow:run` (single streaming instance, abortable via AbortController), `workflow:progress` (step/evaluation events), `workflow:stop`.
-- Renderer `src/modules/WorkflowModule.js` only hands the task to the main process and renders the plan / step / evaluation timeline + verdict badge + report copy.
+- Main process `main/workflow.js` exposes `workflow:run` (single streaming instance, abortable via AbortController), `workflow:progress` (step/evaluation events), `workflow:stop`, `workflow:designer:list` (returns `hasSteps`), and `workflow:openLogs` (open the run-log directory).
+- Renderer `src/modules/WorkflowModule.js` drives the autonomous run and renders the plan / step / evaluation timeline + verdict badge + report copy.
+- Renderer `src/modules/WorkflowDesignerModule.js` is the graphical designer: an SVG node canvas with order/dependency arrows and a detail panel; it edits each step's phases / dependencies / verify / retry, then hands the authored steps to `workflow:run`.
 - Optional "project picker" (`workflow:pickProject` → `main/project.js`) read-only collects a bounded directory tree + key file summaries to inject project context; reuses the baseURL / model / API Key from Settings, no new credentials.
 
-### Verification discipline
+### Verification discipline & guardrails
 
-- The Evaluator only looks at **real run results**, never the Specialist's "I'm done" self-report.
+- The Evaluator/Reviewer only look at **real run results**, never the Specialist's "I'm done" self-report.
 - Failed retries are bounded and **leave evidence each time**; if it does not converge, it reports FAIL honestly instead of faking success.
-- Command execution is sandbox-constrained (tightened read roots, build-command timeout relaxed to 600s), not an unrestricted shell.
+- Command execution is **sandbox-constrained**: a read-only allow-list (`READONLY_ALLOWED`), process-group kill on abort, and removal of `sed`/`awk` to prevent write-ban bypass. It is not an unrestricted shell.
+- Every run is archived by `runlog.js` into `~/Library/Application Support/ai-workbench/logs/` as both structured JSON and a human-readable markdown report.
+
+### API key storage
+
+LLM credentials are kept in the **macOS Keychain** (via the `security` command); `settings.json` holds only non-secret config (baseURL / model). The dev default lives in a git-ignored `.env` and is never packaged.
+
+## Workflow Designer
+
+The graphical designer (`src/modules/WorkflowDesignerModule.js`) lets you author a workflow instead of relying on the runtime Planner.
+
+- **Canvas**: draggable SVG nodes connected by arrows — blue = execution order, orange = dependency.
+- **Detail panel**: edit each step's title / description / acceptance criteria / `verify` hints / dependencies / `phases` (add, remove, reorder `specialist` / `evaluator` / `reviewer`) / retry limit / retry trigger.
+- **Run**: hand the authored steps to `workflow:run`; the engine skips the Planner and drives them exactly. A **"Load example orchestration"** button restores a 3-step sample (specialist → evaluator → reviewer with a dependency chain).
+- **Default**: opens blank → autonomous mode (Planner auto-decomposes). The designer is an optional, advanced entry point, not the primary path.
