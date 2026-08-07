@@ -8,7 +8,7 @@ const path = require('path');
 const { app } = require('electron');
 
 // 日志根目录：
-//  - 开发期（!app.isPackaged）：项目根下的 logs/（即 work/research/ai-workbench/logs），
+//  - 开发期（!app.isPackaged）：项目根下的 logs/（即 frameworks/ai-workbench/logs），
 //    方便直接查看、纳入 .gitignore；
 //  - 打包后（app.isPackaged）：userData/logs 才是稳定可写位置（应用可能在 /Applications，
 //    项目目录未必存在）。
