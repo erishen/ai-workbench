@@ -159,6 +159,4 @@ Paste a web-page URL (`src/modules/TranslateModule.js`); the module detects whet
 ---
 
 ## Related Articles
-
-- English: [ai_workbench: Desktop AI Workbench](https://erishen.cn/ai_workbench-en/)
-- 中文: [ai_workbench：桌面 AI 工作台](https://erishen.cn/ai_workbench/)
+- [Not Trusting the Executor: Verification Architecture for a Desktop AI Workbench](https://erishen.cn/ai_workbench-en/)

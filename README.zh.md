@@ -159,6 +159,4 @@ LLM 凭证存于 **macOS 系统钥匙串**（经 `security` 命令）；`setting
 ---
 
 ## 相关文章
-
-- 中文: [ai_workbench：桌面 AI 工作台](https://erishen.cn/ai_workbench/)
-- English: [ai_workbench: Desktop AI Workbench](https://erishen.cn/ai_workbench-en/)
+- [不信任执行者：桌面 AI 工作台的验证架构设计](https://erishen.cn/ai_workbench/)
