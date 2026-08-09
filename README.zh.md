@@ -155,3 +155,10 @@ LLM 凭证存于 **macOS 系统钥匙串**（经 `security` 命令）；`setting
 ## 翻译模块（Translate）
 
 粘贴一个网页 URL（`src/modules/TranslateModule.js`），模块会自动识别页面是中/英文并互译。适合在应用内快速阅读外文文档。
+
+---
+
+## 相关文章
+
+- 中文: [ai_workbench：桌面 AI 工作台](https://erishen.cn/ai_workbench/)
+- English: [ai_workbench: Desktop AI Workbench](https://erishen.cn/ai_workbench-en/)

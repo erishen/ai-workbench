@@ -155,3 +155,10 @@ A simple multi-turn chat UI (`src/modules/ChatModule.js`) for talking to any Ope
 ## Translate module
 
 Paste a web-page URL (`src/modules/TranslateModule.js`); the module detects whether the page is Chinese or English and translates it into the other language. Handy for reading foreign documentation inline.
+
+---
+
+## Related Articles
+
+- English: [ai_workbench: Desktop AI Workbench](https://erishen.cn/ai_workbench-en/)
+- 中文: [ai_workbench：桌面 AI 工作台](https://erishen.cn/ai_workbench/)
