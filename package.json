@@ -52,8 +52,7 @@
     "eject": "react-scripts eject",
     "electron": "electron .",
     "dev": "concurrently -k -n WEB,ELECTRON \"cross-env BROWSER=none PORT=5190 react-scripts start\" \"wait-on tcp:5190 && cross-env ELECTRON_DEV_PORT=5190 electron .\"",
-    "dist": "electron-builder",
-    "postinstall": "bash $HOME/.electron-dist/link-electron.sh || true"
+    "dist": "electron-builder"
   },
   "eslintConfig": {
     "extends": [
